@@ -4,7 +4,7 @@ import { MarketingRight, RightType } from '../types';
 import { translations } from '../i18n';
 import { 
     Gift, Tag, Search, Plus, Filter, AlertCircle, Edit2, Trash2, 
-    Ticket, ShoppingBag, Coins, CreditCard, Percent, Battery, BatteryWarning
+    Ticket, ShoppingBag, Coins, CreditCard, Percent, Battery, BatteryWarning, X
 } from 'lucide-react';
 
 interface RightsManagementProps {
@@ -22,6 +22,7 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
     const [showModal, setShowModal] = useState(false);
     const [editingRightId, setEditingRightId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<MarketingRight>>({});
+    const [newTag, setNewTag] = useState('');
 
     // Filter Logic
     const filteredRights = rights.filter(r => {
@@ -62,6 +63,7 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
 
     // Actions
     const handleOpenModal = (right?: MarketingRight) => {
+        setNewTag('');
         if (right) {
             setEditingRightId(right.id);
             setFormData(right);
@@ -77,6 +79,21 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
             });
         }
         setShowModal(true);
+    };
+
+    const handleAddTag = () => {
+        if (newTag.trim()) {
+            const tag = newTag.trim();
+            const currentTags = formData.tags || [];
+            if (!currentTags.includes(tag)) {
+                setFormData({ ...formData, tags: [...currentTags, tag] });
+            }
+            setNewTag('');
+        }
+    };
+
+    const handleRemoveTag = (tagToRemove: string) => {
+        setFormData({ ...formData, tags: (formData.tags || []).filter(t => t !== tagToRemove) });
     };
 
     const handleSubmit = () => {
@@ -260,8 +277,8 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
             {/* Create/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
                             <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                                 <Gift className="text-brand-blue" /> {t["rights.modal.title"]}
                             </h3>
@@ -269,7 +286,7 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
                                 <Trash2 size={20} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 overflow-y-auto">
                             <div>
                                 <label className="text-sm font-bold text-gray-700 block mb-1">权益名称</label>
                                 <input 
@@ -333,16 +350,56 @@ export const RightsManagement: React.FC<RightsManagementProps> = ({ rights, onSa
                                     placeholder="例如：美妆, 洗护, 通用"
                                 />
                             </div>
+                            
+                            {/* Tag Editing Section */}
+                            <div>
+                                <label className="text-sm font-bold text-gray-700 block mb-2">标签</label>
+                                <div className="flex flex-wrap gap-2 mb-2 p-3 bg-gray-50 rounded-lg border border-gray-100 min-h-[44px]">
+                                    {formData.tags && formData.tags.length > 0 ? (
+                                        formData.tags.map(tag => (
+                                            <span key={tag} className="bg-white border border-blue-100 text-brand-blue px-2 py-1 rounded text-xs flex items-center gap-1 shadow-sm">
+                                                {tag}
+                                                <button 
+                                                    onClick={() => handleRemoveTag(tag)} 
+                                                    className="hover:text-red-500 hover:bg-red-50 rounded-full p-0.5 transition-colors"
+                                                >
+                                                    <X size={10} />
+                                                </button>
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-gray-400 py-1">暂无标签</span>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        className="flex-1 p-2 border rounded-lg text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                                        value={newTag}
+                                        onChange={e => setNewTag(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                                        placeholder="输入标签后按回车添加..."
+                                    />
+                                    <button 
+                                        onClick={handleAddTag} 
+                                        type="button" 
+                                        disabled={!newTag.trim()}
+                                        className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="text-sm font-bold text-gray-700 block mb-1">描述</label>
                                 <textarea 
-                                    className="w-full p-2 border rounded-lg h-20 resize-none"
+                                    className="w-full p-2 border rounded-lg h-20 resize-none focus:ring-2 focus:ring-brand-blue/20 outline-none"
                                     value={formData.description || ''}
                                     onChange={e => setFormData({...formData, description: e.target.value})}
                                 />
                             </div>
                         </div>
-                        <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 shrink-0">
                             <button 
                                 onClick={() => setShowModal(false)}
                                 className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors"

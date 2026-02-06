@@ -9,10 +9,11 @@ import { translations } from '../i18n';
 interface GoalInputProps {
   onNext: (goal: ParsedGoal) => void;
   lang: 'zh' | 'en';
-  audiences?: MockAudience[]; // Injected from App state
+  audiences?: MockAudience[]; 
+  initialAudience?: MockAudience | null; // New prop
 }
 
-export const GoalInput: React.FC<GoalInputProps> = ({ onNext, audiences = [] }) => {
+export const GoalInput: React.FC<GoalInputProps> = ({ onNext, audiences = [], initialAudience }) => {
   const t = translations;
   
   const [input, setInput] = useState('');
@@ -49,6 +50,29 @@ export const GoalInput: React.FC<GoalInputProps> = ({ onNext, audiences = [] }) 
   const currentBudgetInfo = MOCK_CATEGORY_BUDGETS[category] || MOCK_CATEGORY_BUDGETS['不限'];
   const remainingBudget = currentBudgetInfo.total - currentBudgetInfo.used;
   const isBudgetOverrun = typeof budget === 'number' && budget > remainingBudget;
+
+  // Handle Initial Audience Logic
+  useEffect(() => {
+      if (initialAudience) {
+          setAudienceMode('existing');
+          setSelectedAudienceId(initialAudience.id);
+          // Auto fill dummy parsed data to show the form
+          setParsedData({
+              category: '不限',
+              targetType: '客单提升',
+              targetAudienceName: initialAudience.name,
+              targetAudienceFeatures: initialAudience.description,
+              targetAudienceTags: initialAudience.tags,
+              suggestedTags: [],
+              timeValue: 14,
+              timeUnit: '天',
+              budget: 50000,
+              originalText: `针对人群“${initialAudience.name}”的营销活动`
+          });
+          setInput(`针对人群“${initialAudience.name}”创建营销活动，${initialAudience.description}`);
+          if (editableRef.current) editableRef.current.innerText = `针对人群“${initialAudience.name}”创建营销活动，${initialAudience.description}`;
+      }
+  }, [initialAudience]);
 
   useEffect(() => {
     if (audienceMode === 'create') {
@@ -176,16 +200,6 @@ export const GoalInput: React.FC<GoalInputProps> = ({ onNext, audiences = [] }) 
 
       {/* Input Area */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 mb-8 relative group hover:border-blue-200 transition-colors">
-        <div className="absolute top-4 right-4 flex gap-2">
-            <button 
-                onClick={handleAIOptimize}
-                disabled={isOptimizing || !input}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 rounded-full text-xs font-bold hover:bg-purple-100 transition-colors disabled:opacity-50"
-            >
-                {isOptimizing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                {t["goal.ai_optimize"]}
-            </button>
-        </div>
         
         <div 
             ref={editableRef}
@@ -197,9 +211,21 @@ export const GoalInput: React.FC<GoalInputProps> = ({ onNext, audiences = [] }) 
         />
         
         <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-50">
-            <div className="flex gap-4 text-gray-400">
-                <Mic size={20} className="hover:text-brand-blue cursor-pointer transition-colors" />
+            <div className="flex items-center gap-3">
+                <div className="text-gray-400 p-2 hover:bg-gray-100 rounded-full transition-colors cursor-pointer" title="语音输入 (模拟)">
+                    <Mic size={20} />
+                </div>
+                
+                <button 
+                    onClick={handleAIOptimize}
+                    disabled={isOptimizing || !input}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 rounded-full text-xs font-bold hover:bg-purple-100 transition-colors disabled:opacity-50"
+                >
+                    {isOptimizing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                    {t["goal.ai_optimize"]}
+                </button>
             </div>
+
             <button
                 onClick={handleAnalyze}
                 disabled={isAnalyzing || !input}

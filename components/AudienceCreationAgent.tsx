@@ -1,911 +1,591 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { translations } from '../i18n';
 import { 
     Users, Search, Sparkles, Loader2, Save, BarChart3, MapPin, Tag, TrendingUp, UserCheck, 
     Activity, Plus, Edit2, X, AlertCircle, Calendar, User, FileText, Trash2, PieChart,
-    ChevronDown, ArrowLeft, Clock, CreditCard, ShoppingBag, Lightbulb
+    ChevronDown, ArrowLeft, Clock, CreditCard, ShoppingBag, Lightbulb, Gift, ArrowRight,
+    Filter, MoreHorizontal, Zap, Crown
 } from 'lucide-react';
 import { analyzeAudienceGoal } from '../services/geminiService';
-import { AudienceAnalysisResult, MockAudience, ProfileItem } from '../types';
+import { AudienceAnalysisResult, MockAudience, ProfileItem, MarketingRight } from '../types';
 import { SYSTEM_AUDIENCE_TAGS } from '../constants';
 
-interface AudienceCreationAgentProps {
-  onSave: (audience: MockAudience) => void;
-  onDelete?: (id: string) => void;
-  audiences: MockAudience[];
-  initialQuery?: string;
+interface RightRecommendationCardProps {
+  right: MarketingRight;
+  score?: number;
+  reason?: string;
 }
 
-export const AudienceCreationAgent: React.FC<AudienceCreationAgentProps> = ({ onSave, onDelete, audiences, initialQuery = '' }) => {
-  const t = translations;
-  
-  // State
-  const [query, setQuery] = useState(initialQuery);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<AudienceAnalysisResult | null>(null);
-  
-  // Selection State: Initialize with the first audience if available
-  const [selectedAudienceId, setSelectedAudienceId] = useState<string | null>(
-      audiences.length > 0 ? audiences[0].id : null
-  );
-  
-  // View State
-  const [showInsightReport, setShowInsightReport] = useState(false);
-
-  // Editable State for creation
-  const [editedName, setEditedName] = useState('');
-  const [editedDesc, setEditedDesc] = useState('');
-  const [editedTags, setEditedTags] = useState<string[]>([]);
-  const [showTagSelector, setShowTagSelector] = useState(false);
-  
-  const [isLookalikeEnabled, setIsLookalikeEnabled] = useState(false);
-  const [lookalikeFactor, setLookalikeFactor] = useState(1.5);
-  
-  const selectedAudience = audiences.find(a => a.id === selectedAudienceId);
-  
-  // Determine if we are in Creation Mode (no selected ID)
-  const isCreating = selectedAudienceId === null;
-
-  // Calculate final size based on slider
-  const finalSize = result 
-    ? (isLookalikeEnabled ? Math.round(result.estimatedSize * lookalikeFactor) : result.estimatedSize) 
-    : 0;
-
-  const handleAnalyze = async () => {
-    if (!query.trim()) return;
-    setIsAnalyzing(true);
-    setResult(null);
-    try {
-        const analysis = await analyzeAudienceGoal(query);
-        setResult(analysis);
-        // Initialize editable fields
-        setEditedName(analysis.name);
-        setEditedDesc(analysis.description);
-        setEditedTags(analysis.tags);
-        // Reset lookalike defaults
-        setIsLookalikeEnabled(false);
-        setLookalikeFactor(1.5);
-    } finally {
-        setIsAnalyzing(false);
-    }
-  };
-
-  const handleSave = () => {
-      if (!result) return;
-      const newAudience: MockAudience = {
-          id: `aud_ai_${Date.now()}`,
-          name: editedName + (isLookalikeEnabled ? ' (含扩量)' : ''),
-          size: finalSize,
-          description: editedDesc,
-          tags: editedTags,
-          lastModified: new Date().toISOString().split('T')[0],
-          creator: 'Admin User',
-          createdTime: new Date().toISOString().split('T')[0]
-      };
-      onSave(newAudience);
-      // Automatically select the newly created audience to show detail view
-      setTimeout(() => setSelectedAudienceId(newAudience.id), 100);
-      setResult(null);
-      setQuery('');
-  };
-
-  const handleCreateNew = () => {
-      setResult(null);
-      setQuery('');
-      setSelectedAudienceId(null); // Triggers creation mode (hides sidebar)
-      setShowInsightReport(false);
-  };
-
-  const handleCancelCreate = () => {
-      // Return to the first audience or remain empty if none exist
-      if (audiences.length > 0) {
-          setSelectedAudienceId(audiences[0].id);
-      } else {
-          // If no audiences, we stay in create mode but maybe reset form
-          setResult(null);
-          setQuery('');
-      }
-  };
-
-  const handleSelectAudience = (id: string) => {
-      setSelectedAudienceId(id);
-      setResult(null);
-      setShowInsightReport(false);
-  };
-
-  const handleDeleteAudience = () => {
-      if(selectedAudienceId && onDelete) {
-          if(confirm(t["audience.detail.delete_confirm"])) {
-              onDelete(selectedAudienceId);
-              // Select the previous one or first one, or go to create
-              if (audiences.length > 1) {
-                  const idx = audiences.findIndex(a => a.id === selectedAudienceId);
-                  const newIdx = idx === 0 ? 1 : 0; // fallback logic
-                  setSelectedAudienceId(audiences[newIdx]?.id || null);
-              } else {
-                  setSelectedAudienceId(null);
-              }
-          }
-      }
-  };
-
-  const handleAddTag = (tag: string) => {
-      if (!editedTags.includes(tag)) {
-          setEditedTags([...editedTags, tag]);
-      }
-      setShowTagSelector(false);
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-      setEditedTags(editedTags.filter(tag => tag !== tagToRemove));
-  };
-
-  const handleEditExisting = () => {
-      if(!selectedAudience) return;
-      setQuery(selectedAudience.description); // Pre-fill query
-      setSelectedAudienceId(null); // Switch to create/edit view
-  };
-
-  const handleViewInsight = () => {
-      setShowInsightReport(true);
-  };
-
-  const handleUseExample = (example: string) => {
-      setQuery(example);
-  };
-
-  // Filter available tags
-  const availableTags = SYSTEM_AUDIENCE_TAGS.filter(tag => !editedTags.includes(tag));
-
-  // --- Chart Components ---
-  const TgiBadge = ({ value }: { value: number }) => {
-      let colorClass = 'bg-gray-100 text-gray-500';
-      if (value > 120) colorClass = 'bg-green-100 text-green-700 font-bold';
-      else if (value > 100) colorClass = 'bg-blue-50 text-brand-blue';
-      else if (value < 80) colorClass = 'bg-red-50 text-red-600';
-
-      return (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${colorClass} ml-1`} title="TGI (Target Group Index)">
-              TGI {value}
-          </span>
-      );
-  };
-
-  const AgeChart = ({ data }: { data: ProfileItem[] }) => {
-      const max = Math.max(...data.map(d => d.value));
-      return (
-          <div className="flex items-end gap-2 h-32 mt-4">
-              {data.map(d => (
-                  <div key={d.label} className="flex-1 flex flex-col items-center group relative">
-                      <div className="text-xs text-gray-500 mb-1 opacity-0 group-hover:opacity-100 absolute -top-6">{d.value}%</div>
-                      <div className="flex flex-col items-center w-full">
-                          <div 
-                            className="w-full bg-blue-200 rounded-t hover:bg-blue-300 transition-all relative" 
-                            style={{ height: `${Math.max((d.value / max) * 100, 5)}px` }} 
-                          >
-                              <div 
-                                className={`absolute left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${d.tgi > 100 ? 'bg-green-500' : 'bg-red-400'}`}
-                                style={{ bottom: '4px' }}
-                                title={`TGI: ${d.tgi}`}
-                              ></div>
-                          </div>
-                      </div>
-                      <div className="text-xs text-gray-600 mt-2 font-medium scale-90 whitespace-nowrap">{d.label}</div>
-                      <div className={`text-[10px] scale-75 mt-0.5 font-mono ${d.tgi > 100 ? 'text-green-600 font-bold' : 'text-gray-400'}`}>TGI {d.tgi}</div>
-                  </div>
-              ))}
-          </div>
-      );
-  };
-
-  const GenderChart = ({ data }: { data: ProfileItem[] }) => {
-      return (
-          <div className="w-full mt-4 space-y-2">
-              <div className="flex h-6 rounded-full overflow-hidden">
-                {data.map((d, i) => (
-                    <div 
-                        key={d.label} 
-                        className={`${d.label === '女性' ? 'bg-pink-300' : 'bg-blue-300'} h-full flex items-center justify-center text-xs text-white font-medium`} 
-                        style={{ width: `${d.value}%` }}
-                    >
-                        {d.value > 10 && `${d.value}%`}
-                    </div>
-                ))}
-              </div>
-              <div className="flex justify-between text-xs px-1">
-                  {data.map(d => (
-                      <div key={d.label} className="flex items-center gap-1">
-                          <div className={`w-2 h-2 rounded-full ${d.label === '女性' ? 'bg-pink-300' : 'bg-blue-300'}`}></div>
-                          <span className="text-gray-600">{d.label}</span>
-                          <TgiBadge value={d.tgi} />
-                      </div>
-                  ))}
-              </div>
-          </div>
-      );
-  };
-
-  const CityChart = ({ data }: { data: ProfileItem[] }) => {
-      return (
-          <div className="space-y-3 mt-4">
-              {data.map((c, i) => (
-                  <div key={c.label} className="flex items-center text-xs">
-                      <span className="w-4 text-gray-300 font-mono">{i+1}</span>
-                      <span className="flex-1 text-gray-600 font-medium">{c.label}</span>
-                      
-                      <div className="w-24 h-1.5 bg-gray-100 rounded-full mr-2 overflow-hidden">
-                          <div className="h-full bg-brand-blue rounded-full" style={{ width: `${c.value * 2}%` }}></div> 
-                      </div>
-                      
-                      <span className="w-8 text-right text-gray-800 font-bold mr-2">{c.value}%</span>
-                      <span className={`w-12 text-right font-mono ${c.tgi > 100 ? 'text-green-600 font-bold' : 'text-gray-400'}`}>
-                          {c.tgi}
-                      </span>
-                  </div>
-              ))}
-          </div>
-      );
-  };
-  
-  const PricePrefChart = ({ data }: { data: {label: string, value: number}[] }) => {
-      const max = Math.max(...data.map(d => d.value));
-      return (
-          <div className="space-y-3 mt-4">
-              {data.map((d) => (
-                  <div key={d.label} className="flex items-center gap-2">
-                      <div className="text-xs text-gray-600 w-16 text-right">{d.label}</div>
-                      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-orange-400 rounded-full"
-                            style={{ width: `${(d.value / max) * 100}%` }}
-                          ></div>
-                      </div>
-                      <div className="text-xs font-bold text-gray-700 w-8">{d.value}%</div>
-                  </div>
-              ))}
-          </div>
-      );
-  };
-
-  const ActiveTimeChart = ({ data }: { data: {label: string, value: number}[] }) => {
-      const max = Math.max(...data.map(d => d.value));
-      return (
-        <div className="flex items-end gap-1 h-32 mt-4 px-2">
-            {data.map((d) => (
-                <div key={d.label} className="flex-1 h-full flex flex-col justify-end items-center group">
-                    <div 
-                        className="w-full bg-indigo-200 rounded-t hover:bg-indigo-300 transition-colors relative"
-                        style={{ height: `${(d.value / max) * 80}%` }} 
-                    >
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white px-1.5 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">
-                            {d.value}%
-                        </div>
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-2 whitespace-nowrap scale-90">{d.label}</div>
-                </div>
-            ))}
-        </div>
-      );
-  };
-
-  const CategoryAffinityChart = ({ data }: { data: {label: string, value: number, tgi: number}[] }) => {
-      return (
-          <div className="space-y-3 mt-4">
-              {data.map((d) => (
-                  <div key={d.label} className="flex items-center justify-between text-xs border-b border-gray-50 pb-2">
-                      <span className="font-medium text-gray-700">{d.label}</span>
-                      <div className="flex items-center gap-4">
-                          <span className="text-gray-500">关联度 {d.value}%</span>
-                          <span className={`px-1.5 py-0.5 rounded font-mono ${d.tgi >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                              TGI {d.tgi}
-                          </span>
-                      </div>
-                  </div>
-              ))}
-          </div>
-      );
-  };
-
-  // Mock Insight Data generator
-  const getInsightData = () => {
-      return {
-          conversionRate: 8.5,
-          avgGmv: 245,
-          activeRate: 62,
-          profile: {
-              age: [{label: '18-25', value: 15, tgi: 90}, {label: '26-35', value: 45, tgi: 125}, {label: '36-45', value: 30, tgi: 110}, {label: '45+', value: 10, tgi: 80}],
-              gender: [{label: '女性', value: 70, tgi: 130}, {label: '男性', value: 30, tgi: 60}],
-              city: [{label: '上海', value: 35, tgi: 180}, {label: '北京', value: 20, tgi: 140}, {label: '杭州', value: 15, tgi: 130}, {label: '深圳', value: 10, tgi: 110}, {label: '成都', value: 10, tgi: 105}],
-          },
-          // New dimensions
-          pricePreference: [
-            { label: '低价敏感', value: 15 },
-            { label: '中端性价比', value: 45 },
-            { label: '高端品质', value: 30 },
-            { label: '奢华', value: 10 },
-          ],
-          activeTime: [
-            { label: '0-6点', value: 5 },
-            { label: '6-10点', value: 10 },
-            { label: '10-14点', value: 25 },
-            { label: '14-19点', value: 20 },
-            { label: '19-24点', value: 40 },
-          ],
-          categoryAffinity: [
-            { label: '美妆护肤', value: 85, tgi: 150 },
-            { label: '时尚女装', value: 60, tgi: 120 },
-            { label: '健康保健', value: 40, tgi: 110 },
-            { label: '家居日用', value: 35, tgi: 95 },
-          ]
-      };
-  };
-
-  return (
-    <div className="p-8 max-w-7xl mx-auto h-full flex flex-col">
-      {/* Global Header */}
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <div>
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                {t["audience.title"]}
-            </h2>
-            <p className="text-gray-500 text-sm mt-1">{t["audience.subtitle"]}</p>
-        </div>
-        {!isCreating && (
-            <button 
-                onClick={handleCreateNew}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:shadow-lg hover:scale-105 transition-all flex items-center gap-2 group"
-            >
-                <Sparkles size={18} className="group-hover:animate-spin-slow" /> {t["audience.list.create_new"]}
-            </button>
+const RightRecommendationCard: React.FC<RightRecommendationCardProps> = ({ right, score, reason }) => (
+    <div className="bg-white border border-purple-100 rounded-lg p-3 hover:shadow-md transition-all flex items-start gap-3 group relative overflow-hidden">
+        {/* Score Background Indicator */}
+        {score && (
+            <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-b from-transparent via-purple-200 to-transparent opacity-30"></div>
         )}
-      </div>
+        
+        <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center shrink-0 text-purple-600 group-hover:bg-purple-100 group-hover:scale-110 transition-all">
+            {right.type === 'coupon' ? <CreditCard size={18} /> : 
+             right.type === 'gift' ? <Gift size={18} /> : 
+             right.type === 'point' ? <Sparkles size={18} /> : <ShoppingBag size={18} />}
+        </div>
+        <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-start">
+                <h4 className="font-bold text-gray-800 text-sm truncate" title={right.name}>{right.name}</h4>
+                {score && (
+                    <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                        score >= 90 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                    }`}>
+                        {score}分
+                    </div>
+                )}
+            </div>
+            {reason && (
+                <div className="text-[10px] text-purple-600 mt-0.5 mb-1.5 flex items-center gap-1">
+                    <Sparkles size={8} /> {reason}
+                </div>
+            )}
+            <div className="text-xs text-gray-400 truncate mb-1">{right.description}</div>
+            <div className="flex items-center gap-1">
+                 {right.tags?.slice(0, 2).map(tag => (
+                     <span key={tag} className="text-[10px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-100">{tag}</span>
+                 ))}
+            </div>
+        </div>
+    </div>
+);
 
-      <div className="flex-1 flex bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"> 
-      
-      {/* Sidebar: List (Hidden when creating) */}
-      {!isCreating && (
-          <div className="w-80 border-r border-gray-200 flex flex-col h-full bg-gray-50">
-              <div className="p-4 border-b border-gray-200">
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t["audience.list.title"]}</div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
-                  {audiences.length === 0 && (
-                      <div className="text-center text-gray-400 text-xs py-8">暂无人群包</div>
-                  )}
-                  {audiences.map(aud => (
-                      <div 
-                        key={aud.id}
-                        onClick={() => handleSelectAudience(aud.id)}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex flex-col gap-1 transition-colors cursor-pointer group ${
-                            selectedAudienceId === aud.id 
-                            ? 'bg-white shadow-sm border border-gray-100' 
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-transparent'
-                        }`}
-                      >
-                          <div className="flex items-center justify-between">
-                              <h4 className={`font-bold text-sm truncate ${selectedAudienceId === aud.id ? 'text-brand-blue' : 'text-gray-800'}`}>{aud.name}</h4>
-                              {selectedAudienceId === aud.id && <div className="w-1.5 h-1.5 rounded-full bg-brand-blue"></div>}
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                              <span>{aud.size.toLocaleString()} 人</span>
-                              {aud.tags && aud.tags.length > 0 && <span className="bg-gray-100 px-1.5 rounded truncate max-w-[80px]">{aud.tags[0]}</span>}
-                          </div>
-                      </div>
-                  ))}
-              </div>
-          </div>
-      )}
+interface ProfileBarProps {
+  label: string;
+  value: number;
+  tgi: number;
+  color?: string;
+}
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex flex-col h-full overflow-y-auto relative bg-white">
-          
-          {/* Creating View */}
-          {isCreating ? (
-              <div className="p-8 h-full overflow-y-auto">
-                  <div className="max-w-4xl mx-auto">
-                        <div className="flex items-center justify-between mb-8">
-                            <button 
-                                onClick={handleCancelCreate}
-                                className="flex items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
-                            >
-                                <ArrowLeft size={20} />
-                                <span>{t["common.cancel"]}</span>
-                            </button>
-                            <div className="text-center flex-1 pr-20"> 
-                                {/* Center Title if needed, currently empty to align with back button */}
-                            </div>
-                        </div>
+const ProfileBar: React.FC<ProfileBarProps> = ({ label, value, tgi, color = 'bg-blue-500' }) => (
+    <div className="mb-2">
+        <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-600">{label}</span>
+            <div className="flex gap-2">
+                <span className="font-bold">{value}%</span>
+                <span className={`font-mono text-[10px] px-1 rounded ${tgi > 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>TGI {tgi}</span>
+            </div>
+        </div>
+        <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+            <div className={`h-full ${color}`} style={{ width: `${value}%` }}></div>
+        </div>
+    </div>
+);
 
-                        {/* Input Area */}
-                        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-1 mb-6">
-                            <textarea 
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder={t["audience.input_placeholder"]}
-                                className="w-full p-4 border-none outline-none resize-none h-32 text-gray-700 bg-transparent text-lg placeholder:text-gray-300"
+interface AudienceCreationAgentProps {
+    audiences: MockAudience[];
+    rights: MarketingRight[];
+    onSave: (audience: MockAudience) => void;
+    onDelete: (id: string) => void;
+    onCreateCampaign?: (audience: MockAudience) => void;
+}
+
+export const AudienceCreationAgent: React.FC<AudienceCreationAgentProps> = ({ audiences, rights, onSave, onDelete, onCreateCampaign }) => {
+    const t = translations;
+    const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
+    
+    // Create/Edit State
+    const [input, setInput] = useState('');
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<AudienceAnalysisResult | null>(null);
+    const [selectedAudience, setSelectedAudience] = useState<MockAudience | null>(null);
+    const [editingAudienceId, setEditingAudienceId] = useState<string | null>(null);
+
+    // List View State
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterTag, setFilterTag] = useState<string>('all');
+
+    // Filter Logic
+    const filteredAudiences = useMemo(() => {
+        return audiences.filter(aud => {
+            const matchesSearch = aud.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesTag = filterTag === 'all' || (aud.tags && aud.tags.includes(filterTag));
+            return matchesSearch && matchesTag;
+        });
+    }, [audiences, searchTerm, filterTag]);
+
+    // Available Tags for Filter
+    const availableTags = useMemo(() => {
+        const tags = new Set<string>();
+        audiences.forEach(a => a.tags?.forEach(t => tags.add(t)));
+        return Array.from(tags);
+    }, [audiences]);
+
+    // --- Recommendation Logic ---
+    const getRecommendedRights = (tags: string[] = []) => {
+        if (!rights || rights.length === 0) return [];
+        const tagStr = tags.join(' ');
+        
+        return rights.map(r => {
+            let score = 60; // Base score
+            let reasons: string[] = [];
+
+            // 1. Category Matching (Strongest signal)
+            if (r.category && tagStr.includes(r.category)) {
+                score += 25;
+                reasons.push(`品类偏好: ${r.category}`);
+            }
+            
+            // 2. Tag Matching (Overlap)
+            r.tags?.forEach(rt => {
+                if (tags.some(at => at.includes(rt) || rt.includes(at))) {
+                    score += 10;
+                    if (reasons.length === 0) reasons.push(`标签匹配: ${rt}`);
+                }
+            });
+
+            // 3. Heuristic Rules
+            if (tags.some(t => t.includes('高') || t.includes('净值') || t.includes('精致')) && r.costPerUnit > 10) {
+                score += 5;
+                if (reasons.length === 0) reasons.push("符合高消费力特征");
+            }
+            if (tags.some(t => t.includes('敏感') || t.includes('特惠') || t.includes('低价')) && (r.type === 'discount' || r.type === 'coupon')) {
+                score += 10;
+                if (reasons.length === 0) reasons.push("价格敏感度匹配");
+            }
+            if (tags.some(t => t.includes('车')) && (r.name.includes('停') || r.name.includes('车'))) {
+                score += 30;
+                reasons[0] = "有车一族精准权益";
+            }
+            
+            // Cap at 99
+            score = Math.min(99, score);
+
+            return { right: r, score, reason: reasons[0] || "通用高转化权益" };
+        })
+        .filter(x => x.score > 65)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3); // Top 3
+    };
+
+    // --- Actions ---
+
+    const handleStartCreate = () => {
+        setInput('');
+        setAnalysisResult(null);
+        setEditingAudienceId(null);
+        setView('create');
+    };
+
+    const handleEdit = (aud: MockAudience) => {
+        setInput(aud.description); // Pre-fill
+        setEditingAudienceId(aud.id);
+        // Simulate "Analysis" result based on existing data to show the form
+        setAnalysisResult({
+            name: aud.name,
+            description: aud.description,
+            tags: aud.tags || [],
+            estimatedSize: aud.size,
+            lookalikeSize: Math.floor(aud.size * 2.5),
+            predictedRoi: 0.25, // Mock
+            matchScore: 90,
+            reasoning: '基于历史数据编辑',
+            profile: {
+                 // Mock Profile data for edit mode
+                 age: [{label: '18-24', value: 15, tgi: 100}, {label: '25-34', value: 50, tgi: 120}, {label: '35+', value: 35, tgi: 90}],
+                 gender: [{label: '女性', value: 60, tgi: 110}, {label: '男性', value: 40, tgi: 90}],
+                 city: [{label: '一线', value: 40, tgi: 130}, {label: '二线', value: 30, tgi: 100}, {label: '其他', value: 30, tgi: 80}],
+                 interest: ['购物', '美食']
+            }
+        });
+        setView('create');
+    };
+
+    const handleAnalyze = async () => {
+        if (!input.trim()) return;
+        setIsAnalyzing(true);
+        try {
+            const result = await analyzeAudienceGoal(input);
+            setAnalysisResult(result);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleSave = () => {
+        if (!analysisResult) return;
+        const newAudience: MockAudience = {
+            id: editingAudienceId || `aud_new_${Date.now()}`,
+            name: analysisResult.name,
+            size: analysisResult.estimatedSize,
+            description: analysisResult.description,
+            tags: analysisResult.tags,
+            creator: 'Admin User',
+            createdTime: editingAudienceId ? (audiences.find(a => a.id === editingAudienceId)?.createdTime || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+            lastModified: new Date().toISOString().split('T')[0]
+        };
+        onSave(newAudience);
+        setView('list');
+        setInput('');
+        setAnalysisResult(null);
+        setEditingAudienceId(null);
+    };
+
+    const handleViewDetail = (aud: MockAudience) => {
+        setSelectedAudience(aud);
+        setView('detail');
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm(t["common.delete"] + '?')) {
+            onDelete(id);
+            if (selectedAudience?.id === id) setView('list');
+        }
+    };
+
+    const handleCreateCampaignAction = (e: React.MouseEvent, aud: MockAudience) => {
+        e.stopPropagation();
+        if (onCreateCampaign) onCreateCampaign(aud);
+    };
+
+    return (
+        <div className="p-8 max-w-7xl mx-auto h-full flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-6 shrink-0">
+                <div className="flex items-center gap-3">
+                    {view !== 'list' && (
+                        <button onClick={() => setView('list')} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                            {t["audience.title"]}
+                        </h2>
+                        <p className="text-gray-500 text-sm mt-1">{t["audience.subtitle"]}</p>
+                    </div>
+                </div>
+                {view === 'list' && (
+                    <button 
+                        onClick={handleStartCreate}
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 group"
+                    >
+                        <Sparkles size={18} className="group-hover:animate-spin-slow" /> {t["audience.create"]}
+                    </button>
+                )}
+            </div>
+
+            {/* View: List */}
+            {view === 'list' && (
+                <div className="flex flex-col gap-6">
+                    {/* Toolbar */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div className="relative flex-1 md:max-w-md w-full">
+                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                            <input 
+                                type="text" 
+                                placeholder={t["audience.search_placeholder"]}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-blue/20 outline-none text-sm transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
                             />
-                            <div className="bg-gray-50 rounded-b-xl border-t border-gray-100 px-4 py-3 flex justify-between items-center">
-                                <span className="text-xs text-gray-400 flex items-center gap-1">
-                                    {t["audience.input_hint"]}
-                                </span>
-                                <button 
-                                    onClick={handleAnalyze}
-                                    disabled={isAnalyzing || !query.trim()}
-                                    className="bg-brand-blue text-white px-6 py-2 rounded-lg font-bold hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-70 text-sm"
-                                >
-                                    {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                                    <span>
-                                        {isAnalyzing ? "Analyzing..." : (result ? t["audience.btn.reanalyze"] : t["audience.btn.analyze"])}
-                                    </span>
-                                </button>
-                            </div>
                         </div>
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <Filter size={16} className="text-gray-400" />
+                            <select 
+                                className="bg-gray-50 border-none text-sm font-medium text-gray-700 focus:ring-0 rounded-lg cursor-pointer hover:bg-gray-100 p-2 min-w-[120px]"
+                                value={filterTag}
+                                onChange={(e) => setFilterTag(e.target.value)}
+                            >
+                                <option value="all">{t["common.all"]}</option>
+                                {availableTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                            </select>
+                        </div>
+                    </div>
 
-                        {/* Guide & Examples - ONLY visible when NO result yet */}
-                        {!result && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
-                                {/* Left: Paradigm Guide */}
-                                <div className="bg-blue-50/50 rounded-xl p-5 border border-blue-100">
-                                    <h4 className="flex items-center gap-2 font-bold text-gray-700 mb-3 text-sm">
-                                        <Lightbulb size={16} className="text-yellow-500" /> 
-                                        {t["audience.create.guide_title"]}
-                                    </h4>
-                                    <div className="bg-white rounded-lg p-3 border border-blue-100 mb-3 shadow-sm">
-                                        <div className="flex items-center gap-1 text-sm font-mono text-brand-blue font-bold justify-center bg-blue-50 py-2 rounded">
-                                            {t["audience.create.guide_formula"]}
-                                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredAudiences.map(aud => (
+                            <div 
+                                key={aud.id} 
+                                onClick={() => handleViewDetail(aud)}
+                                className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group flex flex-col"
+                            >
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="p-2 bg-blue-50 text-brand-blue rounded-lg group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                                        <Users size={20} />
                                     </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        {t["audience.create.guide_desc"]}
-                                    </p>
-                                </div>
-
-                                {/* Right: Examples */}
-                                <div className="space-y-3">
-                                    <h4 className="font-bold text-gray-700 text-sm pl-1">{t["audience.create.examples"]}</h4>
-                                    {[
-                                        t["audience.create.example1"], 
-                                        t["audience.create.example2"], 
-                                        t["audience.create.example3"]
-                                    ].map((example, i) => (
-                                        <button 
-                                            key={i}
-                                            onClick={() => handleUseExample(example)}
-                                            className="w-full text-left p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-brand-blue/30 rounded-lg text-xs text-gray-600 transition-all hover:shadow-sm"
-                                        >
-                                            {example}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Analysis Result */}
-                        {result && (
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up mt-8">
-                                {/* Header with Save */}
-                                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm">
-                                    <div className="flex items-center gap-3 flex-1">
-                                        <div className="bg-green-100 text-green-700 p-2 rounded-full">
-                                            <Sparkles size={18} />
-                                        </div>
-                                        <div className="flex-1">
-                                            <input 
-                                                value={editedName}
-                                                onChange={(e) => setEditedName(e.target.value)}
-                                                className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-brand-blue outline-none transition-colors w-full"
-                                            />
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={handleSave}
-                                        className="bg-brand-blue text-white px-6 py-2 rounded-lg font-bold shadow hover:bg-opacity-90 transition-all flex items-center gap-2 text-sm"
-                                    >
-                                        <Save size={16} /> {t["common.save"]}
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2">
-                                    {/* Left: Configuration */}
-                                    <div className="p-6 border-r border-gray-100 space-y-6">
-                                        
-                                        {/* Description */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">人群描述</label>
-                                            <textarea 
-                                                value={editedDesc}
-                                                onChange={(e) => setEditedDesc(e.target.value)}
-                                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-1 focus:ring-brand-blue outline-none resize-none h-24"
-                                            />
-                                        </div>
-
-                                        {/* Tags */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block flex justify-between">
-                                                <span>特征标签</span>
-                                                <button 
-                                                    className="text-brand-blue cursor-pointer flex items-center gap-1 hover:underline text-xs" 
-                                                    onClick={() => setShowTagSelector(!showTagSelector)}
-                                                >
-                                                    <Plus size={12} /> 添加
-                                                </button>
-                                            </label>
-                                            <div className="flex flex-wrap gap-2 mb-2">
-                                                {editedTags.map(tag => (
-                                                    <span key={tag} className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-xs font-medium group">
-                                                        <Tag size={10} /> {tag}
-                                                        <X 
-                                                            size={12} 
-                                                            className="cursor-pointer hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" 
-                                                            onClick={() => handleRemoveTag(tag)}
-                                                        />
-                                                    </span>
-                                                ))}
-                                            </div>
-                                            
-                                            {/* Tag Selector */}
-                                            {showTagSelector && (
-                                                <div className="p-3 bg-white border border-gray-200 rounded-xl shadow-lg z-10 animate-fade-in-up">
-                                                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                                                        {availableTags.length > 0 ? availableTags.map(tag => (
-                                                            <button 
-                                                                key={tag}
-                                                                onClick={() => handleAddTag(tag)}
-                                                                className="px-2 py-1 bg-gray-50 hover:bg-brand-blue hover:text-white rounded border border-gray-100 text-xs transition-colors"
-                                                            >
-                                                                {tag}
-                                                            </button>
-                                                        )) : (
-                                                            <span className="text-xs text-gray-400">已选择所有标签</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Lookalike */}
-                                        <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2 text-purple-800 font-bold text-sm">
-                                                    <UserCheck size={16} /> {t["audience.lookalike"]}
-                                                </div>
-                                                <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="sr-only peer" 
-                                                        checked={isLookalikeEnabled}
-                                                        onChange={() => setIsLookalikeEnabled(!isLookalikeEnabled)}
-                                                    />
-                                                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                                                </label>
-                                            </div>
-                                            <p className="text-xs text-gray-500 mb-3">{t["audience.lookalike.desc"]}</p>
-                                            
-                                            {isLookalikeEnabled && (
-                                                <div className="pt-2 border-t border-purple-100">
-                                                    <div className="flex justify-between items-center text-xs text-purple-700 mb-2">
-                                                        <span className="font-bold">{t["audience.lookalike.factor"]}: {lookalikeFactor}x</span>
-                                                        <span>预估规模: <strong>{Math.round(result.estimatedSize * lookalikeFactor).toLocaleString()}</strong></span>
-                                                    </div>
-                                                    <input 
-                                                        type="range" 
-                                                        min="1.1" 
-                                                        max="3.0" 
-                                                        step="0.1"
-                                                        value={lookalikeFactor}
-                                                        onChange={(e) => setLookalikeFactor(parseFloat(e.target.value))}
-                                                        className="w-full h-1.5 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                                                    />
-                                                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                                                        <span>1.1x (精准)</span>
-                                                        <span>3.0x (广覆盖)</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Key Metrics */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-gray-50 p-3 rounded-lg text-center">
-                                                <div className="text-xs text-gray-500 mb-1">{t["audience.result.size"]}</div>
-                                                <div className="text-xl font-bold text-gray-800">
-                                                    {finalSize.toLocaleString()}
-                                                </div>
-                                                {isLookalikeEnabled && <div className="text-[10px] text-purple-500 mt-0.5 font-medium">含扩量</div>}
-                                            </div>
-                                            <div className="bg-green-50 p-3 rounded-lg text-center border border-green-100">
-                                                <div className="text-xs text-green-700 mb-1 flex items-center justify-center gap-1">
-                                                    <TrendingUp size={12} /> {t["audience.result.roi"]}
-                                                </div>
-                                                <div className="text-xl font-bold text-green-600">
-                                                    +{(result.predictedRoi * 100).toFixed(0)}%
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Right: Charts */}
-                                    <div className="p-6 bg-gray-50/30">
-                                        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm">
-                                            <BarChart3 size={16} /> {t["audience.result.title"]}
-                                        </h3>
-
-                                        <div className="space-y-8">
-                                            {/* Age */}
-                                            <div>
-                                                <div className="flex justify-between text-xs text-gray-500 font-medium">
-                                                    <span>{t["audience.chart.age"]}</span>
-                                                </div>
-                                                <AgeChart data={result.profile.age} />
-                                            </div>
-
-                                            {/* Gender */}
-                                            <div>
-                                                <div className="flex justify-between text-xs text-gray-500 font-medium">
-                                                    <span>{t["audience.chart.gender"]}</span>
-                                                </div>
-                                                <GenderChart data={result.profile.gender} />
-                                            </div>
-
-                                            {/* City */}
-                                            <div>
-                                                <div className="flex justify-between text-xs text-gray-500 font-medium border-b border-gray-200 pb-1 mb-2">
-                                                    <span>{t["audience.chart.city"]}</span>
-                                                    <span className="flex gap-4">
-                                                        <span>占比</span>
-                                                        <span className="w-12 text-right">{t["audience.chart.tgi"]}</span>
-                                                    </span>
-                                                </div>
-                                                <CityChart data={result.profile.city} />
-                                            </div>
-                                        </div>
+                                    <div className="text-right">
+                                        <div className="text-lg font-bold text-gray-800">{aud.size.toLocaleString()}</div>
+                                        <div className="text-xs text-gray-400">覆盖人数</div>
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                  </div>
-              </div>
-          ) : (
-              // Viewing existing audience details or report
-              <div className="h-full overflow-y-auto w-full">
-                  {selectedAudience && (
-                    <>
-                      {/* Detailed Insight Report View */}
-                      {showInsightReport ? (
-                        <div className="h-full flex flex-col bg-white animate-fade-in-up">
-                            {/* Report Header */}
-                            <div className="px-8 py-6 bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
-                                <div className="flex items-center gap-4">
-                                    <button 
-                                        onClick={() => setShowInsightReport(false)}
-                                        className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
-                                    >
-                                        <ArrowLeft size={20} />
-                                    </button>
-                                    <div>
-                                        <h2 className="text-xl font-bold text-gray-800">{t["audience.report.title"]}</h2>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span className="bg-blue-50 text-brand-blue px-2 py-0.5 rounded font-medium">{selectedAudience.name}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-opacity-90 transition-all">
-                                    导出 PDF
-                                </button>
-                            </div>
-                            
-                            {/* Report Content */}
-                            <div className="p-8 space-y-8 overflow-y-auto flex-1">
-                                {/* Section 1: History Performance */}
-                                <section>
-                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <TrendingUp size={18} className="text-brand-blue" />
-                                        {t["audience.report.conversion"]}
-                                    </h3>
-                                    <div className="grid grid-cols-3 gap-6">
-                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                                            <div className="text-sm text-gray-500 mb-1">历史转化率</div>
-                                            <div className="text-2xl font-bold text-gray-800">{getInsightData().conversionRate}%</div>
-                                            <div className="text-xs text-green-600 mt-1 font-medium">高于大盘 +2.1%</div>
-                                        </div>
-                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                                            <div className="text-sm text-gray-500 mb-1">平均客单价</div>
-                                            <div className="text-2xl font-bold text-gray-800">¥{getInsightData().avgGmv}</div>
-                                        </div>
-                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                                            <div className="text-sm text-gray-500 mb-1">活跃度评分</div>
-                                            <div className="text-2xl font-bold text-gray-800">{getInsightData().activeRate}</div>
-                                            <div className="text-xs text-gray-400 mt-1">满分 100</div>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                {/* Section 2: Demographics */}
-                                <section>
-                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <Users size={18} className="text-purple-600" />
-                                        {t["audience.report.demographics"]}
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                                            <h4 className="text-sm font-bold text-gray-600 mb-4">年龄分布 TGI</h4>
-                                            <AgeChart data={getInsightData().profile.age} />
-                                        </div>
-                                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                                            <h4 className="text-sm font-bold text-gray-600 mb-4">城市分布 TGI</h4>
-                                            <CityChart data={getInsightData().profile.city} />
-                                        </div>
-                                    </div>
-                                </section>
+                                <h3 className="font-bold text-gray-800 mb-2">{aud.name}</h3>
+                                <p className="text-sm text-gray-500 line-clamp-2 mb-4 flex-1">{aud.description}</p>
                                 
-                                {/* Section 3: Business Insights (New) */}
-                                <section>
-                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <ShoppingBag size={18} className="text-orange-500" />
-                                        {t["audience.report.behavior"]}
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        {/* Price Preference */}
-                                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <CreditCard size={14} className="text-gray-400" />
-                                                <h4 className="text-sm font-bold text-gray-600">{t["audience.report.price_pref"]}</h4>
-                                            </div>
-                                            <PricePrefChart data={getInsightData().pricePreference} />
-                                        </div>
-                                        
-                                        {/* Active Time */}
-                                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <Clock size={14} className="text-gray-400" />
-                                                <h4 className="text-sm font-bold text-gray-600">{t["audience.report.active_time"]}</h4>
-                                            </div>
-                                            <ActiveTimeChart data={getInsightData().activeTime} />
-                                        </div>
-
-                                        {/* Category Affinity */}
-                                        <div className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <Tag size={14} className="text-gray-400" />
-                                                <h4 className="text-sm font-bold text-gray-600">{t["audience.report.category_pref"]}</h4>
-                                            </div>
-                                            <CategoryAffinityChart data={getInsightData().categoryAffinity} />
-                                        </div>
+                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                    {aud.tags?.slice(0, 3).map(tag => (
+                                        <span key={tag} className="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 rounded border border-gray-100">{tag}</span>
+                                    ))}
+                                    {(aud.tags?.length || 0) > 3 && <span className="text-xs text-gray-400 py-0.5">+{ (aud.tags?.length || 0) - 3}</span>}
+                                </div>
+                                
+                                <div className="pt-4 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400">
+                                    <span>{aud.createdTime}</span>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={(e) => handleCreateCampaignAction(e, aud)}
+                                            className="flex items-center gap-1 px-2 py-1 bg-brand-blue text-white rounded shadow-sm hover:bg-blue-600 transition-colors font-medium"
+                                            title={t["audience.action.campaign"]}
+                                        >
+                                            <Zap size={12} fill="currentColor" /> <span className="text-[10px]">一键营销</span>
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleEdit(aud); }}
+                                            className="p-1.5 hover:bg-gray-100 hover:text-gray-700 rounded transition-colors"
+                                            title={t["common.edit"]}
+                                        >
+                                            <Edit2 size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDelete(aud.id); }}
+                                            className="p-1.5 hover:bg-red-50 hover:text-red-500 rounded transition-colors"
+                                            title={t["common.delete"]}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
                                     </div>
-                                </section>
+                                </div>
+                            </div>
+                        ))}
+                        {filteredAudiences.length === 0 && (
+                            <div className="col-span-full py-20 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                <Users size={48} className="mx-auto mb-4 opacity-20" />
+                                <p>暂未找到匹配的人群包</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
-                                {/* Section 4: AI Conclusion */}
-                                <section className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100">
-                                    <div className="flex gap-3">
-                                        <Sparkles className="text-brand-blue shrink-0 mt-1" size={20} />
+            {/* View: Create / Detail */}
+            {view !== 'list' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full min-h-0">
+                    
+                    {/* Main Content Area (Input or Insight) */}
+                    <div className="lg:col-span-8 overflow-y-auto space-y-6 pb-20">
+                        
+                        {/* Create Mode: Input Section */}
+                        {view === 'create' && (
+                            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm animate-fade-in">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">{t["audience.input_label"]}</label>
+                                <div className="relative">
+                                    <textarea 
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        placeholder={t["audience.placeholder"]}
+                                        className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-blue/20 outline-none text-sm h-32 resize-none"
+                                    />
+                                    <button 
+                                        onClick={handleAnalyze}
+                                        disabled={isAnalyzing || !input}
+                                        className="absolute right-3 bottom-3 bg-brand-blue text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-opacity-90 disabled:opacity-50 transition-all"
+                                    >
+                                        {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                        {t["audience.analyze_btn"]}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Analysis / Detail Display */}
+                        {(analysisResult || view === 'detail') && (
+                            <div className="animate-fade-in space-y-6">
+                                {/* Basic Info Card */}
+                                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                                    <div className="flex justify-between items-start mb-4">
                                         <div>
-                                            <h4 className="font-bold text-brand-blue mb-2">AI 洞察总结</h4>
-                                            <p className="text-sm text-gray-700 leading-relaxed">
-                                                该人群表现出极高的品牌忠诚度，且是典型的高消费潜力群体。
-                                                数据显示其对<span className="font-bold">中高端价格带</span>接受度高，活跃时间集中在<span className="font-bold">晚间 19-24 点</span>，
-                                                且与<span className="font-bold">美妆护肤</span>品类有极强的关联性（TGI 150）。
-                                                建议后续活动在晚间黄金时段，推送高客单价的美妆组合套装。
+                                            <h3 className="text-xl font-bold text-gray-800">
+                                                {view === 'detail' ? selectedAudience?.name : analysisResult?.name}
+                                            </h3>
+                                            <p className="text-gray-500 text-sm mt-1 max-w-2xl">
+                                                {view === 'detail' ? selectedAudience?.description : analysisResult?.description}
                                             </p>
                                         </div>
+                                        <div className="text-right">
+                                            <div className="text-2xl font-bold text-brand-blue">
+                                                {(view === 'detail' ? selectedAudience?.size : analysisResult?.estimatedSize)?.toLocaleString()}
+                                            </div>
+                                            <div className="text-xs text-gray-400">预估规模</div>
+                                        </div>
                                     </div>
-                                </section>
-                            </div>
-                        </div>
-                      ) : (
-                        // Normal Detail View
-                        <div className="h-full flex flex-col bg-white">
-                            {/* Detail Header */}
-                            <div className="px-8 py-6 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-start">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <h2 className="text-2xl font-bold text-gray-800">{selectedAudience.name}</h2>
-                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded border border-green-200 font-medium">
-                                            {t["status.active"]}
-                                        </span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {(view === 'detail' ? selectedAudience?.tags : analysisResult?.tags)?.map(tag => (
+                                            <span key={tag} className="bg-blue-50 text-brand-blue px-3 py-1 rounded-full text-xs font-bold border border-blue-100 flex items-center gap-1">
+                                                <Tag size={10} /> {tag}
+                                            </span>
+                                        ))}
+                                        {view === 'create' && (
+                                            <button className="text-xs text-gray-400 flex items-center gap-1 px-2 py-1 hover:text-brand-blue border border-dashed border-gray-300 rounded-full">
+                                                <Plus size={12} /> 添加标签
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="text-sm text-gray-500 font-mono">ID: {selectedAudience.id}</div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <button 
-                                        onClick={handleEditExisting}
-                                        className="p-2 text-gray-500 hover:text-brand-blue hover:bg-blue-50 rounded-lg transition-colors flex flex-col items-center gap-1"
-                                        title={t["common.edit"]}
-                                    >
-                                        <Edit2 size={20} />
-                                        <span className="text-[10px]">{t["common.edit"]}</span>
-                                    </button>
-                                    <button 
-                                        onClick={handleDeleteAudience}
-                                        className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex flex-col items-center gap-1"
-                                        title={t["common.delete"]}
-                                    >
-                                        <Trash2 size={20} />
-                                        <span className="text-[10px]">{t["common.delete"]}</span>
-                                    </button>
-                                </div>
-                            </div>
 
-                            {/* Detail Content */}
-                            <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-y-auto">
-                                {/* Left Info Column */}
-                                <div className="md:col-span-2 space-y-8">
-                                    {/* Metrics Row */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 bg-gray-50 rounded-xl">
-                                            <div className="text-sm text-gray-500 mb-1">{t["audience.detail.size"]}</div>
-                                            <div className="text-2xl font-bold text-gray-800">{selectedAudience.size.toLocaleString()}</div>
-                                        </div>
-                                        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                                            <div className="text-sm text-blue-600 mb-1">{t["audience.detail.update_time"]}</div>
-                                            <div className="text-lg font-bold text-blue-900">{selectedAudience.lastModified}</div>
-                                        </div>
-                                    </div>
-
-                                    {/* Description & Conditions */}
-                                    <div>
-                                        <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                            <FileText size={18} className="text-gray-400" />
-                                            {t["audience.detail.conditions"]}
-                                        </h3>
-                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-gray-700 leading-relaxed">
-                                            {selectedAudience.description}
-                                        </div>
-                                    </div>
-
-                                    {/* Tags */}
-                                    <div>
-                                        <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                            <Tag size={18} className="text-gray-400" />
-                                            {t["audience.result.tags"]}
-                                        </h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedAudience.tags?.map(tag => (
-                                                <span key={tag} className="px-3 py-1 bg-white border border-gray-200 rounded-full text-sm text-gray-600 shadow-sm">
-                                                    {tag}
-                                                </span>
+                                {/* Deep Insight Charts Grid */}
+                                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                                    <h4 className="font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                        <BarChart3 size={18} className="text-gray-500" /> {t["audience.detail.insight"]}
+                                    </h4>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {/* Age Distribution */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><User size={12}/> 年龄分布</h5>
+                                            {(analysisResult?.profile?.age || [
+                                                {label: '18-24', value: 15, tgi: 90}, {label: '25-34', value: 45, tgi: 120}, {label: '35-44', value: 30, tgi: 105}, {label: '45+', value: 10, tgi: 80}
+                                            ]).map((item: any) => (
+                                                <ProfileBar key={item.label} label={item.label} value={item.value} tgi={item.tgi} color="bg-blue-500" />
                                             ))}
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* Right Meta Column */}
-                                <div className="space-y-6">
-                                    <div className="p-5 border border-gray-100 rounded-xl shadow-sm">
-                                        <h4 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">基本信息</h4>
-                                        <div className="space-y-4 text-sm">
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-500 flex items-center gap-2"><User size={14}/> {t["audience.detail.creator"]}</span>
-                                                <span className="font-medium text-gray-800">{selectedAudience.creator || 'Admin User'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-500 flex items-center gap-2"><Calendar size={14}/> {t["audience.detail.create_time"]}</span>
-                                                <span className="font-medium text-gray-800">{selectedAudience.createdTime || '2023-10-01'}</span>
+                                        {/* City Distribution */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><MapPin size={12}/> 城市分布</h5>
+                                            {(analysisResult?.profile?.city || [
+                                                {label: '一线城市', value: 40, tgi: 130}, {label: '新一线', value: 30, tgi: 110}, {label: '二线', value: 20, tgi: 90}, {label: '其他', value: 10, tgi: 70}
+                                            ]).map((item: any) => (
+                                                <ProfileBar key={item.label} label={item.label} value={item.value} tgi={item.tgi} color="bg-purple-500" />
+                                            ))}
+                                        </div>
+
+                                        {/* Consumption Capability (Moved from right) */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><CreditCard size={12}/> {t["audience.detail.consumption"]}</h5>
+                                            <div className="flex gap-2 items-end h-20 mb-2 mt-4">
+                                                <div className="flex-1 bg-green-50 rounded-t relative group h-full">
+                                                    <div className="absolute bottom-0 w-full bg-green-400 rounded-t transition-all" style={{height: '20%'}}></div>
+                                                    <div className="absolute bottom-1 w-full text-center text-[10px] text-green-700 font-bold">低</div>
+                                                </div>
+                                                <div className="flex-1 bg-green-50 rounded-t relative group h-full">
+                                                    <div className="absolute bottom-0 w-full bg-green-500 rounded-t transition-all" style={{height: '50%'}}></div>
+                                                    <div className="absolute bottom-1 w-full text-center text-[10px] text-white font-bold">中</div>
+                                                </div>
+                                                <div className="flex-1 bg-green-50 rounded-t relative group h-full">
+                                                    <div className="absolute bottom-0 w-full bg-green-600 rounded-t transition-all" style={{height: '30%'}}></div>
+                                                    <div className="absolute bottom-1 w-full text-center text-[10px] text-white font-bold">高</div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Report Action */}
-                                    <div className="bg-gradient-to-br from-brand-blue to-blue-700 rounded-xl p-5 text-white shadow-lg relative overflow-hidden group cursor-pointer" onClick={handleViewInsight}>
-                                        <div className="relative z-10">
-                                            <h4 className="font-bold text-lg mb-1">{t["audience.detail.insight"]}</h4>
-                                            <p className="text-blue-100 text-xs mb-3">查看该人群的历史转化表现与画像分布</p>
-                                            <div className="inline-flex items-center gap-1 text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors">
-                                                <PieChart size={16} /> 点击查看
+                                        {/* Active Time (Moved from right) */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><Clock size={12}/> {t["audience.detail.active_time"]}</h5>
+                                            <div className="space-y-3 mt-4">
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className="w-8">早间</span>
+                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-400" style={{width: '20%'}}></div></div>
+                                                    <span className="w-8 text-right text-gray-500">20%</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className="w-8">午间</span>
+                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500" style={{width: '35%'}}></div></div>
+                                                    <span className="w-8 text-right text-gray-500">35%</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className="w-8">晚间</span>
+                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-600" style={{width: '45%'}}></div></div>
+                                                    <span className="w-8 text-right text-gray-500">45%</span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <PieChart size={80} className="absolute -bottom-4 -right-4 text-white/10 group-hover:scale-110 transition-transform duration-500" />
+
+                                        {/* New: Gender Distribution (Simplified Bar) */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><Users size={12}/> {t["audience.detail.gender"]}</h5>
+                                            <div className="flex h-4 rounded-full overflow-hidden w-full mt-4">
+                                                <div className="bg-pink-400 h-full flex items-center justify-center text-[9px] text-white font-bold" style={{width: '60%'}}>60%</div>
+                                                <div className="bg-blue-400 h-full flex items-center justify-center text-[9px] text-white font-bold" style={{width: '40%'}}>40%</div>
+                                            </div>
+                                            <div className="flex justify-between text-xs mt-1 px-1">
+                                                <span className="text-pink-500 font-bold">女性</span>
+                                                <span className="text-blue-500 font-bold">男性</span>
+                                            </div>
+                                        </div>
+
+                                        {/* New: Member Level */}
+                                        <div>
+                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1"><Crown size={12}/> {t["audience.detail.member_level"]}</h5>
+                                            <div className="space-y-2 mt-2">
+                                                <ProfileBar label="金卡会员" value={20} tgi={150} color="bg-yellow-500" />
+                                                <ProfileBar label="银卡会员" value={45} tgi={110} color="bg-gray-400" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-              </div>
-          )}
-      </div>
-      </div>
-    </div>
-  );
+                        )}
+                    </div>
+
+                    {/* Right Panel: Extended Stats & Actions */}
+                    <div className="lg:col-span-4 space-y-6 overflow-y-auto pb-20">
+                        {(analysisResult || view === 'detail') ? (
+                            <div className="space-y-6 animate-fade-in-up">
+                                
+                                {/* 1. Action Card */}
+                                <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-6 rounded-xl shadow-lg text-white">
+                                    <h4 className="font-bold text-lg mb-2">一键营销</h4>
+                                    <p className="text-indigo-100 text-sm mb-4">立即针对该人群创建精准营销活动，AI 将自动匹配策略。</p>
+                                    <button 
+                                        onClick={() => {
+                                            const aud = view === 'detail' ? selectedAudience! : {
+                                                id: 'temp', name: analysisResult!.name, description: analysisResult!.description, size: analysisResult!.estimatedSize, tags: analysisResult!.tags
+                                            } as MockAudience;
+                                            if (onCreateCampaign) onCreateCampaign(aud);
+                                        }}
+                                        className="w-full py-2.5 bg-white text-indigo-600 rounded-lg font-bold shadow hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Zap size={18} /> {t["activity.create_btn"]}
+                                    </button>
+                                </div>
+
+                                {/* 4. Rights Recommendations */}
+                                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 p-5 rounded-xl border border-purple-100">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2">
+                                            <Lightbulb className="text-yellow-500" size={16} />
+                                            {t["audience.recommend.rights_title"]}
+                                        </h3>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {getRecommendedRights(view === 'detail' ? selectedAudience?.tags : analysisResult?.tags).map((item, idx) => (
+                                            <RightRecommendationCard 
+                                                key={idx} 
+                                                right={item.right} 
+                                                score={item.score} 
+                                                reason={item.reason}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Save Button (Create Mode Only) */}
+                                {view === 'create' && (
+                                    <button 
+                                        onClick={handleSave}
+                                        className="w-full py-3 bg-brand-blue text-white rounded-lg font-bold shadow hover:bg-opacity-90 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Save size={18} /> {editingAudienceId ? '更新人群包' : '保存人群包'}
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            // Empty state filler for Create View before analysis
+                             <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-8 text-center text-gray-400 h-full flex flex-col items-center justify-center">
+                                <Sparkles size={48} className="mb-4 opacity-20" />
+                                <p>在左侧输入描述并解析后，<br/>此处将显示深度洞察与建议。</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };

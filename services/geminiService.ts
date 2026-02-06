@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ParsedGoal, Scheme, StrategyType, Metrics, AttributionReport, Activity, AudienceAnalysisResult, DataColumn, DataTable, GeneratedFeature } from "../types";
 import { SYSTEM_AUDIENCE_TAGS, MOCK_SCHEMES } from "../constants";
@@ -27,20 +26,17 @@ export const optimizePrompt = async (input: string): Promise<string> => {
   try {
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: `You are a marketing expert. Rewrite the user's rough marketing goal into a professional, clear, and specific prompt string in Chinese. 
-      Input: "${input}"
-      
-      Requirements:
-      1. Make it complete.
-      2. If specific details (like budget, specific product line, time) are missing, **YOU MUST** insert a placeholder wrapped in thick brackets like this: 【请输入预算】 or 【请补充具体时间】. 
-      3. Use professional marketing terminology.
-      4. Keep it concise but detailed enough for an AI agent to parse.
-      5. Language must be Simplified Chinese.
-      6. CRITICAL: Return ONLY the rewritten prompt string. Do not include any introductory text.
-      
-      Example Input: "想搞个洗护的活动"
-      Example Output: "计划针对洗护品类发起一场复购提升活动，目标人群为近期活跃会员，预计投放预算【请输入预算金额】，活动周期14天。"
-      `,
+      contents: `Input: "${input}"`,
+      config: {
+        systemInstruction: `You are a marketing expert. Rewrite the user's rough marketing goal into a professional, clear, and specific prompt string in Simplified Chinese.
+        
+        Requirements:
+        1. Make it complete.
+        2. If specific details (like budget, specific product line, time) are missing, **YOU MUST** insert a placeholder wrapped in thick brackets like this: 【请输入预算】 or 【请补充具体时间】. 
+        3. Use professional marketing terminology.
+        4. Keep it concise but detailed enough for an AI agent to parse.
+        5. CRITICAL: Return ONLY the rewritten prompt string. Do not include any introductory text.`
+      }
     });
     return response.text?.trim() || input;
   } catch (error) {
@@ -53,26 +49,22 @@ export const parseUserGoal = async (input: string): Promise<ParsedGoal> => {
   try {
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: `Analyze the following marketing goal input and extract structured data.
-      Input: "${input}"
-      
-      Rules:
-      1. Category: If strictly not mentioned, return "不限". Valid values generally align with: 洗护, 美妆, 食品, 母婴, 家居, 服饰.
-      2. Target Type Mapping (CRITICAL):
-         - If input mentions "新客", "首购", "注册", "未下单", "潜客", set targetType to "拉新获客".
-         - If input mentions "复购", "老客", "回购", "再次购买", set targetType to "复购提升".
-         - If input mentions "流失", "召回", "回来", set targetType to "流失召回".
-         - Default to "复购提升" only if unclear.
-      3. Time: Extract the duration value and unit (Days or Hours). Default to 14 Days.
-      4. Budget: Extract the numeric value only (e.g. 50000 for 5万). Default to 0 if not found.
-      5. Audience: 
-         - 'targetAudienceName': Short name of the group.
-         - 'targetAudienceFeatures': Detailed features for creating this audience.
-         - 'targetAudienceTags': Select relevant tags strictly from this list: ${JSON.stringify(SYSTEM_AUDIENCE_TAGS)}.
-         - 'suggestedTags': If the user describes specific criteria NOT in the system list (e.g. "Registered in last 30 days" -> "最近30天注册", "High return rate" -> "高退货偏好"), extract them as new short tags here.
-
-      Return JSON.`,
+      contents: `Input: "${input}"`,
       config: {
+        systemInstruction: `Analyze the marketing goal input and extract structured data.
+        
+        Rules:
+        1. Category: If strictly not mentioned, return "不限". Valid values: 洗护, 美妆, 食品, 母婴, 家居, 服饰.
+        2. Target Type Mapping:
+           - "新客", "首购" -> "拉新获客"
+           - "复购", "老客" -> "复购提升"
+           - "流失", "召回" -> "流失召回"
+           - Default -> "复购提升"
+        3. Time: Extract duration value and unit. Default 14 Days.
+        4. Budget: Extract numeric value. Default 0 if not found.
+        5. Audience:
+           - targetAudienceTags: Select from ${JSON.stringify(SYSTEM_AUDIENCE_TAGS)}.
+           - suggestedTags: Extract specific criteria not in system list.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -114,30 +106,24 @@ export const parseUserGoal = async (input: string): Promise<ParsedGoal> => {
 
 export const analyzeAudienceGoal = async (input: string): Promise<AudienceAnalysisResult> => {
   try {
-    const prompt = `Act as an Audience Selection Agent. Analyze the user's audience description.
-    Input: "${input}"
-    
-    System Tags: ${JSON.stringify(SYSTEM_AUDIENCE_TAGS)}
-    
-    Tasks:
-    1. Generate a catchy Audience Name.
-    2. Summarize the description.
-    3. Match 3-5 tags (System tags or new ones).
-    4. Predict the audience size (Random number between 5,000 and 500,000).
-    5. Calculate predicted Lookalike expansion size (1.5x - 3x of original).
-    6. Predict ROI uplift (e.g., 0.2 means 20%).
-    7. Generate profile distribution data (Age groups, Gender split, Top 5 Cities).
-       - 'value': Percentage distribution (sum to roughly 100).
-       - 'tgi': Target Group Index (average is 100). High TGI (>100) means high affinity.
-    8. Provide reasoning for the selection.
-
-    Language: Simplified Chinese.
-    Return JSON matching the AudienceAnalysisResult schema.`;
-
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: prompt,
+      contents: `Input: "${input}"`,
       config: {
+        systemInstruction: `Act as an Audience Selection Agent. Analyze the user's audience description.
+        System Tags: ${JSON.stringify(SYSTEM_AUDIENCE_TAGS)}
+        
+        Tasks:
+        1. Generate a catchy Audience Name.
+        2. Summarize the description.
+        3. Match 3-5 tags.
+        4. Predict audience size (5k - 500k).
+        5. Calculate lookalike size (1.5x - 3x).
+        6. Predict ROI uplift (0.1 - 0.5).
+        7. Generate profile distribution (Age, Gender, City).
+           - value: Percentage.
+           - tgi: Target Group Index (avg 100).
+        8. Provide reasoning.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -189,27 +175,20 @@ export const analyzeAudienceGoal = async (input: string): Promise<AudienceAnalys
 
 export const generateSchemes = async (goal: ParsedGoal): Promise<Scheme[]> => {
   try {
-    const prompt = `Based on the marketing goal:
-    Category: ${goal.category}
-    Type: ${goal.targetType}
-    Budget: ${goal.budget}
-    Duration: ${goal.timeValue} ${goal.timeUnit}
-    Audience: ${goal.targetAudienceName} (${goal.targetAudienceFeatures})
-
-    Generate 3 distinct marketing schemes in Simplified Chinese (简体中文).
-    1. Balanced Strategy (Balance ROI and Scale)
-    2. Precision Strategy (High ROI, small scale)
-    3. Expansion Strategy (Max Scale, lower ROI)
-
-    Ensure the response is valid JSON matching the schema.
-    Metrics should be realistic numbers.
-    Cost should be within budget ${goal.budget}.
-    `;
-
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: prompt,
+      contents: `Category: ${goal.category}
+      Type: ${goal.targetType}
+      Budget: ${goal.budget}
+      Duration: ${goal.timeValue} ${goal.timeUnit}
+      Audience: ${goal.targetAudienceName} (${goal.targetAudienceFeatures})`,
       config: {
+        systemInstruction: `You are a senior marketing strategist. Generate 3 distinct marketing schemes in Simplified Chinese.
+        1. Balanced Strategy (Balance ROI and Scale)
+        2. Precision Strategy (High ROI, small scale)
+        3. Expansion Strategy (Max Scale, lower ROI)
+        
+        Ensure Metrics are realistic and Cost is within Budget.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -299,19 +278,52 @@ export const generateSchemes = async (goal: ParsedGoal): Promise<Scheme[]> => {
 };
 
 export const recalculateMetrics = async (scheme: Scheme, changes: string): Promise<Metrics> => {
-    // Simulate API call for recalculation
-    await new Promise(r => setTimeout(r, 800)); // Simulate latency
-    
-    // Simple mock logic for demo purposes based on random fluctuations
-    const factor = 0.9 + Math.random() * 0.2; // 0.9 to 1.1
-    
-    return {
-        roi: Number((scheme.metrics.roi * factor).toFixed(2)),
-        gmv: Math.floor(scheme.metrics.gmv * factor),
-        cost: Math.floor(scheme.metrics.cost * (0.95 + Math.random() * 0.1)), // Cost changes slightly less
-        audienceSize: Math.floor(scheme.metrics.audienceSize * factor),
-        conversionRate: Number((scheme.metrics.conversionRate * (0.9 + Math.random() * 0.2)).toFixed(3)),
-    };
+    try {
+        const response = await ai.models.generateContent({
+            model: modelId,
+            contents: `Current Scheme Config: ${JSON.stringify(scheme.config)}
+            Current Metrics: ${JSON.stringify(scheme.metrics)}
+            User Changes: ${changes}
+            
+            Calculate the new metrics based on the changes.`,
+            config: {
+                systemInstruction: `You are a Marketing Analytics AI. Predict campaign performance metrics based on configuration changes.
+                
+                Logic:
+                - If benefits are stronger (e.g. higher discount), Conversion Rate and Cost increase, ROI might decrease.
+                - If audience is narrower/more precise, Audience Size decreases, Conversion Rate increases, ROI increases.
+                - If channel changes to SMS/Push, Cost varies (SMS > Push).
+                - Return realistic numbers close to the original ones but reflecting the trend of the change.`,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        roi: { type: Type.NUMBER },
+                        gmv: { type: Type.NUMBER },
+                        cost: { type: Type.NUMBER },
+                        audienceSize: { type: Type.NUMBER },
+                        conversionRate: { type: Type.NUMBER },
+                    },
+                    required: ["roi", "gmv", "cost", "audienceSize", "conversionRate"]
+                }
+            }
+        });
+        
+        const metrics = JSON.parse(response.text || "{}");
+        if (metrics.roi !== undefined) return metrics;
+        throw new Error("Invalid metrics");
+    } catch (error) {
+        handleApiError("Recalculate Metrics", error);
+        // Fallback logic
+        const factor = 0.9 + Math.random() * 0.2; // 0.9 to 1.1
+        return {
+            roi: Number((scheme.metrics.roi * factor).toFixed(2)),
+            gmv: Math.floor(scheme.metrics.gmv * factor),
+            cost: Math.floor(scheme.metrics.cost * (0.95 + Math.random() * 0.1)),
+            audienceSize: Math.floor(scheme.metrics.audienceSize * factor),
+            conversionRate: Number((scheme.metrics.conversionRate * (0.9 + Math.random() * 0.2)).toFixed(3)),
+        };
+    }
 }
 
 export const generateAttributionReport = async (activity: Activity): Promise<AttributionReport> => {
@@ -322,32 +334,25 @@ export const generateAttributionReport = async (activity: Activity): Promise<Att
   const abTestContext = hasAbTest ? `
     This activity included an A/B test on variable: ${activity.schemeDetail?.abTest?.variable}.
     Include an A/B Test Conclusion in the report.
-    - Declare one variant as the winner with statistical significance.
-    - Uplift should be positive (e.g. 5-15%).
-    - Confidence should be > 95%.
   ` : '';
 
   try {
-    const prompt = `Generate a marketing attribution report for a completed activity.
-    Activity Name: ${activity.name}
-    Category: ${activity.category}
-    Budget: ${activity.budget}
-    Target ROI: ${activity.roi}
-    ${abTestContext}
-    
-    Generate realistic data for:
-    1. Overview (Final ROI, GMV, Cost, Conversion Rate). Make Final ROI slightly higher than Target ROI to show success.
-    2. Shapley Value Attribution Factors (Audience, Benefit, Content, Channel). Total contribution sum 100%.
-    3. 2 Insights (Z-score > 2 anomalies). One positive (e.g. specific age group), one negative or neutral.
-    4. 3 Actionable Suggestions (New Activity, Template, or Config change).
-
-    Return JSON matching the AttributionReport schema. Language: Simplified Chinese.
-    `;
-
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: prompt,
+      contents: `Activity Name: ${activity.name}
+      Category: ${activity.category}
+      Budget: ${activity.budget}
+      Target ROI: ${activity.roi}
+      ${abTestContext}`,
       config: {
+        systemInstruction: `Generate a marketing attribution report (AttributionReport schema) for a completed activity in Simplified Chinese.
+        
+        Components:
+        1. Overview: Final ROI (success > target), GMV, Cost, CVR.
+        2. Shapley Value Factors: Audience, Benefit, Content, Channel (sum 100%).
+        3. Insights: 2 anomalies (Z-score > 2).
+        4. Suggestions: 3 actionable items.
+        5. AB Test Conclusion: If applicable, declare a winner with statistical significance.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -474,24 +479,19 @@ export const generateAttributionReport = async (activity: Activity): Promise<Att
 export const generateFeatureSql = async (description: string, tableContext: DataTable, columns: DataColumn[]): Promise<string> => {
     try {
         const columnContext = columns.map(c => `${c.name} (${c.type}): ${c.description}`).join('\n');
-        const prompt = `You are a SQL Expert specializing in Feature Engineering.
-        Generate a SQL snippet (standard SQL) to extract a feature based on the user's description.
-        
-        Table: ${tableContext.name} (${tableContext.description})
-        Columns:
-        ${columnContext}
-        
-        User Description: "${description}"
-        
-        Requirements:
-        1. Return ONLY the SQL code. No markdown, no explanation.
-        2. The SQL should be a SELECT statement returning 'user_id' (or primary key) and the calculated feature.
-        3. Use standard SQL aggregation functions if needed.
-        `;
-
         const response = await ai.models.generateContent({
             model: modelId,
-            contents: prompt,
+            contents: `Table: ${tableContext.name} (${tableContext.description})
+            Columns:
+            ${columnContext}
+            
+            User Description: "${description}"`,
+            config: {
+                systemInstruction: `You are a SQL Expert. Generate a standard SQL snippet to extract a feature.
+                1. Return ONLY the SQL code.
+                2. Select 'user_id' and the calculated feature.
+                3. Use aggregation if needed.`
+            }
         });
 
         return response.text?.trim() || "-- SQL generation failed";
@@ -504,33 +504,18 @@ export const generateFeatureSql = async (description: string, tableContext: Data
 export const autoDiscoverFeatures = async (table: DataTable, columns: DataColumn[]): Promise<GeneratedFeature[]> => {
     try {
         const columnContext = columns.map(c => `${c.name} (${c.type}): ${c.description}`).join('\n');
-        const prompt = `Act as an expert Data Scientist. Analyze the table schema below and suggest 3-5 useful features for marketing analysis.
-        
-        Table: ${table.name} (${table.description})
-        Columns:
-        ${columnContext}
-        
-        Rules:
-        1. If it's a Transaction/Event table (has amount, time, order_id), suggest aggregations like "Last 30 days total amount", "Average Order Value", "Order Count".
-        2. If it's a User table (has demographics), suggest basic profile features or derived age groups.
-        3. If it contains categorical data, suggest preference features (e.g. "Most frequent product category").
-        
-        Return JSON array of objects with schema:
-        {
-            "name": "Feature Name",
-            "code": "feature_code_snake_case",
-            "description": "Short explanation",
-            "category": "RFM" | "Lifecycle" | "Preference" | "Risk" | "Custom",
-            "ruleSql": "SQL select statement returning user_id and feature value"
-        }
-        
-        Ensure SQL is valid standard SQL.
-        `;
-
         const response = await ai.models.generateContent({
             model: modelId,
-            contents: prompt,
+            contents: `Table: ${table.name} (${table.description})
+            Columns:
+            ${columnContext}`,
             config: {
+                systemInstruction: `Act as an expert Data Scientist. Suggest 3-5 useful marketing features for this table.
+                
+                Rules:
+                1. Transaction table -> Aggregations (Sum, Avg, Count).
+                2. User table -> Demographics, Lifecycle.
+                3. Return JSON array with name, code, description, category, ruleSql.`,
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.ARRAY,
@@ -635,21 +620,12 @@ export const autoDiscoverFeatures = async (table: DataTable, columns: DataColumn
 
 export const augmentDataSchema = async (tableName: string, columnNames: string[]): Promise<{ tableDesc: string, columnDescs: Record<string, string> } | null> => {
   try {
-    const prompt = `Act as a Data Dictionary Expert. 
-    Analyze the table name and column names to provide business-friendly descriptions in Simplified Chinese.
-    
-    Table: ${tableName}
-    Columns: ${columnNames.join(', ')}
-    
-    Return a JSON object with:
-    1. tableDesc: A concise description of what this table likely contains.
-    2. columns: An array of objects, each containing 'name' (column name) and 'description' (business definition).
-    `;
-
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: prompt,
+      contents: `Table: ${tableName}
+      Columns: ${columnNames.join(', ')}`,
       config: {
+        systemInstruction: `Act as a Data Dictionary Expert. Provide business-friendly descriptions for the table and columns in Simplified Chinese.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -697,24 +673,15 @@ export const augmentDataSchema = async (tableName: string, columnNames: string[]
 
 export const suggestFeatureCategories = async (name: string, description: string, sql: string, existingCategories: string[]): Promise<string[]> => {
     try {
-        const prompt = `Act as a Feature Engineer. Analyze the feature below and suggest 1-2 most relevant categories.
-        
-        Feature Name: ${name}
-        Description: ${description}
-        SQL: ${sql}
-        
-        Existing Categories: ${existingCategories.join(', ')}
-        
-        Rules:
-        1. Prioritize choosing from 'Existing Categories' if a good match exists.
-        2. If no good match, suggest a new standard category (e.g., 'Behavior', 'Monetary', 'Demographic', 'Risk').
-        3. Return JSON array of strings.
-        `;
-
         const response = await ai.models.generateContent({
             model: modelId,
-            contents: prompt,
+            contents: `Feature Name: ${name}
+            Description: ${description}
+            SQL: ${sql}
+            Existing Categories: ${existingCategories.join(', ')}`,
             config: {
+                systemInstruction: `Act as a Feature Engineer. Suggest 1-2 relevant categories for the feature.
+                Prioritize existing categories. If none match, suggest a standard new one.`,
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.ARRAY,
